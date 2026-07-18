@@ -13,6 +13,8 @@
 | Container runs on Alpha, fails on Beta | Beta is ARM64 + Enroot, Alpha is x86 + Apptainer | rebuild ARM64 images for Beta |
 | Portal/FIDO links from memory don't resolve | two domains | ssh = `empire-ai.org` (hyphen); portal/support/Beta = `empireai.edu` |
 
+| `uv venv --clear` fails: `Directory not empty (os error 39)` | NFS home: uv's internal remove trips on `.nfs` silly-rename files | `rm -rf <venv> || true` then plain `uv venv` (smoke_test.sh does this since 2026-07-18) |
+
 Still stuck → the official docs table in SKILL.md §8, then a ticket at
 https://empireai.freshdesk.com/support/home (NVIDIA office hours: Thursdays
 2–3pm ET).
