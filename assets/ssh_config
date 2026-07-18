@@ -1,0 +1,15 @@
+# Empire AI Alpha — append to ~/.ssh/config, replace USER with your username.
+# ControlMaster: one interactive login (password + TOTP) leaves a master socket;
+# every later ssh/scp/rsync to this host rides it prompt-free for 12h.
+Host empire alpha.empire-ai.org
+  HostName alpha.empire-ai.org
+  User USER
+  # The server has no pubkey auth; without this line an ssh-agent offering
+  # multiple keys burns MaxAuthTries -> "Too many authentication failures"
+  PubkeyAuthentication no
+  PreferredAuthentications keyboard-interactive,password
+  ControlMaster auto
+  ControlPath ~/.ssh/sockets/%r@%h-%p
+  ControlPersist 12h
+  ServerAliveInterval 60
+  ServerAliveCountMax 5
