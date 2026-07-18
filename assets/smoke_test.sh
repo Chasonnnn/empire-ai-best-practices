@@ -14,7 +14,7 @@ echo "== institution: $INST | lustre: $LUSTRE =="
 echo "== uv + env (latest stable) =="
 command -v ~/.local/bin/uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
-uv venv ~/venvs/smoke --python 3.13
+uv venv --clear ~/venvs/smoke --python 3.13
 source ~/venvs/smoke/bin/activate
 uv pip install --quiet torch transformers datasets accelerate
 python -c 'import torch,transformers; print("torch",torch.__version__,"| transformers",transformers.__version__)'
