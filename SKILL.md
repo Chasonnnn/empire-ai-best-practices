@@ -91,6 +91,22 @@ In jobs: `export HF_HOME=/mnt/lustre/INSTITUTION/USER/hf`.
 - Monitor: `squeue -u $USER` · `sacct -j <id> -X -o State,Elapsed` · `scancel <id>`.
   Agent-side: poll `sacct` over the socket every ≥60s and act on ALL terminal
   states (COMPLETED/FAILED/CANCELLED/TIMEOUT/OUT_OF_MEMORY/NODE_FAIL/PREEMPTED).
+- **Validate at submit time, not just at job start.** On a busy cluster the
+  scarce resource is queue position: a job that pends for days and dies in
+  seconds in its own job-start preflight costs the entire wait (lived it:
+  a 3-day pend ended in a 2-second manifest-mismatch death). So mirror every
+  CPU-safe check the job runs at start — env locks, data files, model-snapshot
+  manifests, schema/config compatibility — as a login-node check at submission
+  time. Run the **same code path** (e.g. give the preflight script an
+  `--io-only` flag that exits before the first CUDA call), never a duplicate
+  reimplementation: two implementations drift, and that drift is exactly how
+  jobs die at start.
+- **Staged artifacts don't update themselves.** When you upgrade a validator,
+  manifest schema, or its writer, regenerate everything already staged on the
+  cluster in the same change — an artifact materialized under the old schema
+  fails the new checker days later. Stamp a `schema_version` in manifests.
+  Corollary while a job is still PENDING: its staged inputs are read at job
+  start, so you can fix them in place without losing queue position.
 - Fresh setup? The end-to-end smoke test is **optional and costs SUs** — offer it
   and let the user decide, don't auto-run it: [assets/smoke_test.sh](assets/smoke_test.sh)
   (self-configuring BERT/SST-2; expected `RESULT accuracy=0.92xx` — measured run:
