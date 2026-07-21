@@ -17,8 +17,13 @@ through these steps in order.
 
 1. Copy [assets/ssh_config](assets/ssh_config) into `~/.ssh/config`, replacing
    `USER` with your Empire AI username.
-2. `mkdir -p ~/.ssh/sockets && chmod 700 ~/.ssh/sockets`
-3. The `PubkeyAuthentication no` line is load-bearing: the server has no pubkey
+2. Ask the user how long one login should stay valid (`ControlPersist`).
+   **Default: 48h.** It is client-side only (no server policy caps it); the real
+   bound is network continuity — sleep or a network change kills the socket
+   early regardless of the setting. Pick shorter if they prefer re-auth more
+   often on a shared machine.
+3. `mkdir -p ~/.ssh/sockets && chmod 700 ~/.ssh/sockets`
+4. The `PubkeyAuthentication no` line is load-bearing: the server has no pubkey
    auth, and an ssh-agent offering several keys exhausts the server's auth
    attempts before the password prompt appears (see TROUBLESHOOTING.md).
 
@@ -33,12 +38,15 @@ ssh empire
 ```
 
 Password → 6-digit code → you're in. You may `exit` immediately; the
-ControlMaster socket persists 12h and every subsequent agent command rides it.
+ControlMaster socket persists 48h (or your configured window) and every
+subsequent agent command rides it.
 
 ## 4. Verify
 
 - `ssh -O check empire` → `Master running (pid=...)`
 - `ssh empire 'sacctmgr -nP show assoc user=$USER format=Account'` → your
   INSTITUTION value for SKILL.md §0.
-- Optional full validation: run [assets/smoke_test.sh](assets/smoke_test.sh)
-  (self-configuring BERT/SST-2 training job, ~10 GPU-min, ~$0.10 in SUs).
+- **Optional** full validation — it spends SUs, so ask the user whether they
+  want to run it rather than running it automatically:
+  [assets/smoke_test.sh](assets/smoke_test.sh) (self-configuring BERT/SST-2
+  training job, ~10 GPU-min, ~$0.10 in SUs).

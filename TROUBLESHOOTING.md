@@ -4,7 +4,7 @@
 |---|---|---|
 | `Too many authentication failures` before any prompt | ssh-agent offered several keys, or a TTY-less shell looped silent empty prompts | `PubkeyAuthentication no` for this host (in [assets/ssh_config](assets/ssh_config)); log in only from a real terminal |
 | Login "hangs" or `read_passphrase: can't open /dev/tty` | agent shells (and Claude Code's `!` prompt) have no TTY | a human logs in from a real terminal; agents ride the socket |
-| `ssh empire` prompts again unexpectedly | ControlMaster socket expired (12h) or was killed | `ssh -O check empire` to confirm; ask the human for one fresh `ssh empire` |
+| `ssh empire` prompts again unexpectedly | ControlMaster socket expired (48h default, or your configured `ControlPersist`) or was killed early by sleep/network change | `ssh -O check empire` to confirm; ask the human for one fresh `ssh empire` |
 | srun sits in `queued and waiting` indefinitely | GPU partition saturated | wrap in `timeout N` (revokes cleanly); `sbatch --test-only` shows projected start; `--qos=test` or `--qos=priority` to jump |
 | Job dies at exactly 1h | partition DefaultTime is 1:00:00 | always pass `-t` |
 | `lfs: command not found` inside a job | Lustre client tools absent on compute nodes | run `lfs quota` from the login node |

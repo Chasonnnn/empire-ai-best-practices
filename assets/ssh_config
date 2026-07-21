@@ -1,6 +1,9 @@
 # Empire AI Alpha — append to ~/.ssh/config, replace USER with your username.
 # ControlMaster: one interactive login (password + TOTP) leaves a master socket;
-# every later ssh/scp/rsync to this host rides it prompt-free for 12h.
+# every later ssh/scp/rsync to this host rides it prompt-free for 48h (default —
+# ControlPersist is client-side; adjust to taste; ask the user their preference).
+# Real lifetime is bounded by network continuity: sleep or a network change
+# drops the TCP connection and kills the master early.
 Host empire alpha.empire-ai.org
   HostName alpha.empire-ai.org
   User USER
@@ -10,6 +13,6 @@ Host empire alpha.empire-ai.org
   PreferredAuthentications keyboard-interactive,password
   ControlMaster auto
   ControlPath ~/.ssh/sockets/%r@%h-%p
-  ControlPersist 12h
+  ControlPersist 48h
   ServerAliveInterval 60
   ServerAliveCountMax 5

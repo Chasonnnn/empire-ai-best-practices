@@ -26,11 +26,16 @@ shells have no TTY. So:
 
 1. A **human** logs in once from a real terminal: `ssh empire` (config from
    [assets/ssh_config](assets/ssh_config)). They may exit immediately — the
-   ControlMaster socket persists 12h.
+   ControlMaster socket persists **48h** (default; `ControlPersist` in the config).
 2. Agent verifies `ssh -O check empire` → `Master running`, then runs everything
    via `ssh empire '<cmd>'` / `scp` / `rsync -e ssh`, prompt-free.
 3. Use `-o BatchMode=yes` in scripts and pollers so a dead socket fails fast.
 4. Socket lapsed → ask the human for one fresh `ssh empire`; nothing else works.
+5. `ControlPersist` is **client-side only** — no server policy caps it, so longer
+   windows are fine. The real bound is network continuity: laptop sleep or a
+   network change drops the TCP connection and kills the master regardless of
+   the setting. Changing the value takes effect on the **next** fresh login, not
+   the currently running master.
 
 ## 2. Cluster map (Alpha)
 
@@ -86,7 +91,8 @@ In jobs: `export HF_HOME=/mnt/lustre/INSTITUTION/USER/hf`.
 - Monitor: `squeue -u $USER` · `sacct -j <id> -X -o State,Elapsed` · `scancel <id>`.
   Agent-side: poll `sacct` over the socket every ≥60s and act on ALL terminal
   states (COMPLETED/FAILED/CANCELLED/TIMEOUT/OUT_OF_MEMORY/NODE_FAIL/PREEMPTED).
-- Fresh setup? Prove the whole chain with [assets/smoke_test.sh](assets/smoke_test.sh)
+- Fresh setup? The end-to-end smoke test is **optional and costs SUs** — offer it
+  and let the user decide, don't auto-run it: [assets/smoke_test.sh](assets/smoke_test.sh)
   (self-configuring BERT/SST-2; expected `RESULT accuracy=0.92xx` — measured run:
   0.9266, 27s train on 1× H100 at ~2,480 samples/s, well under 1 SU).
 

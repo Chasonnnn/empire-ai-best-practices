@@ -10,7 +10,8 @@ rediscover them.
 **What's covered**
 
 - The only connection pattern that works for AI agents (human logs in once with TOTP,
-  agents ride a 12h SSH ControlMaster socket — no keys, no TTY)
+  agents ride a 48h SSH ControlMaster socket — no keys, no TTY; window is
+  client-side and configurable)
 - Cluster map: institution GPU partitions (H100 + H200, confirmed accessible), the
   `coldfront_test` H200 side door, ARM `grace` nodes, the QOS priority ladder
 - Storage layout (home vs Lustre, no-backup warning), HF cache placement
@@ -33,8 +34,9 @@ Then:
    personalization).
 2. New to the cluster, or a machine that has never connected? Follow
    [SETUP.md](SETUP.md) — account, FIDO/TOTP enrollment, SSH config.
-3. Prove the whole chain works: `bash assets/smoke_test.sh` (run on the cluster; it
-   configures itself).
+3. Optionally prove the whole chain works: `bash assets/smoke_test.sh` (run on the
+   cluster; it configures itself). It spends a few SUs (~10 GPU-min), so agents
+   should offer it and let the user decide rather than running it automatically.
 
 Claude Code picks the skill up automatically whenever cluster work comes up. Other
 agents (Codex, etc.): the files are plain markdown — point your agent at `SKILL.md`.
