@@ -41,7 +41,7 @@ shells have no TTY. So:
 
 | Partition | Nodes | Hardware | Validated result |
 |---|---|---|---|
-| `INSTITUTION` (e.g. `cornell`) | alphagpu01–24 (x86, 2 TB RAM, 8 GPU/node) | H100 80GB on gpu01–18, **H200 141GB on gpu19–24** | busy (~20 pending) yet a 1-GPU 5-min job ran within ~10 min |
+| `INSTITUTION` (e.g. `cornell`) | alphagpu01–24 (x86, 2 TB RAM, 8 GPU/node) | H100 80GB on gpu01–18, **H200 141GB on gpu19–24** | 2026-07-17: busy (~20 pending) yet a 1-GPU 5-min job ran in ~10 min. 2026-08-08 sustained load (~86 jobs/~51 pending): `--test-only` projected ~30h standard / ~15h priority for a 1-GPU multi-hour job — size wait expectations to current `squeue` depth, not the happy data point |
 | `coldfront_test` | alphagpu19–24 | H200-only side door, AllowAccounts=ALL, 6h cap | `--test-only` accepted with QOS `test` |
 | `grace` | betagg01–60 + alphagh01 | **ARM aarch64** Grace, CPU-only | **instant allocation**, mostly idle |
 | `cpu` | alphacpu01 | single x86 CPU node | was down — use `grace` |
@@ -52,6 +52,10 @@ shells have no TTY. So:
 - **QOS ladder** (standard institution assoc): `cornell`-style default (prio 0, 7d,
   ~30 jobs) · `standard` (500, 2d, ≤32 GPU) · `test` (800, 2h, ≤8 GPU — debug lane)
   · `priority` (1000, 1d, ≤64 GPU, **2× SU**; cut a projected start 15→3 min).
+  **Your `-t` must fit inside the chosen QOS's MaxWall** — sbatch rejects with
+  `QOSMaxWallDurationPerJobLimit` / "Job violates accounting/QOS policy", an error
+  that never mentions walltime (hit live 2026-08-09: `-t 36:00:00` on `priority`,
+  whose cap is 1d; resubmit with `-t 24:00:00` worked).
 - Partition: DefaultTime **1:00:00** (always set `-t`), MaxTime 7d, `PreemptMode=REQUEUE`.
   ~1 SU per Alpha GPU-hr (~$0.50); ~20k SU/project/yr; balance CLI **UNVERIFIED**
   (portal = ColdFront; ask support).
@@ -91,6 +95,10 @@ In jobs: `export HF_HOME=/mnt/lustre/INSTITUTION/USER/hf`.
 - Monitor: `squeue -u $USER` · `sacct -j <id> -X -o State,Elapsed` · `scancel <id>`.
   Agent-side: poll `sacct` over the socket every ≥60s and act on ALL terminal
   states (COMPLETED/FAILED/CANCELLED/TIMEOUT/OUT_OF_MEMORY/NODE_FAIL/PREEMPTED).
+  **`sacct` history is short-horizon**: a scheduler reset (observed 2026-08-09 —
+  job ids restarted from ~996xxx down to ~86xx) wiped prior accounting records.
+  Record job ids + metadata off-cluster at submit time; never plan on querying
+  last month's jobs later.
 - **Validate at submit time, not just at job start.** On a busy cluster the
   scarce resource is queue position: a job that pends for days and dies in
   seconds in its own job-start preflight costs the entire wait (lived it:
@@ -106,7 +114,12 @@ In jobs: `export HF_HOME=/mnt/lustre/INSTITUTION/USER/hf`.
   cluster in the same change — an artifact materialized under the old schema
   fails the new checker days later. Stamp a `schema_version` in manifests.
   Corollary while a job is still PENDING: its staged inputs are read at job
-  start, so you can fix them in place without losing queue position.
+  start, so you can fix them in place without losing queue position. Caveat:
+  that same mutability means several simultaneously PENDING sibling jobs can
+  start from drifted code/data bytes. For provenance-critical batches, stage
+  each submission into its own immutable snapshot (read-only, manifest of
+  content hashes verified again at job start) — you trade away in-place fixes
+  deliberately; a fix then means cancel + resubmit.
 - Fresh setup? The end-to-end smoke test is **optional and costs SUs** — offer it
   and let the user decide, don't auto-run it: [assets/smoke_test.sh](assets/smoke_test.sh)
   (self-configuring BERT/SST-2; expected `RESULT accuracy=0.92xx` — measured run:
