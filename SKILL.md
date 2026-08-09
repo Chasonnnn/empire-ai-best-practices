@@ -52,10 +52,15 @@ shells have no TTY. So:
 - **QOS ladder** (standard institution assoc): `cornell`-style default (prio 0, 7d,
   ~30 jobs) · `standard` (500, 2d, ≤32 GPU) · `test` (800, 2h, ≤8 GPU — debug lane)
   · `priority` (1000, 1d, ≤64 GPU, **2× SU**; cut a projected start 15→3 min).
-  **Your `-t` must fit inside the chosen QOS's MaxWall** — sbatch rejects with
-  `QOSMaxWallDurationPerJobLimit` / "Job violates accounting/QOS policy", an error
-  that never mentions walltime (hit live 2026-08-09: `-t 36:00:00` on `priority`,
-  whose cap is 1d; resubmit with `-t 24:00:00` worked).
+  **Your `-t` must be STRICTLY BELOW the chosen QOS's MaxWall** (both hit live
+  2026-08-09 on `priority`, cap 1-00:00:00): above the cap (`-t 36:00:00`) sbatch
+  hard-rejects with `QOSMaxWallDurationPerJobLimit` / "Job violates accounting/QOS
+  policy" — an error that never mentions walltime; at exactly the cap
+  (`-t 24:00:00`) the job is ACCEPTED but then pends forever with
+  `QOSMaxWallDurationPerJobLimit` as its squeue REASON. Fix pending jobs in place,
+  keeping queue position: `scontrol update JobId=<id> TimeLimit=12:00:00` —
+  the reason flips to `Priority` and a projected START_TIME appears within a
+  scheduler cycle. Check caps with `sacctmgr -nP show qos format=Name,MaxWall`.
 - Partition: DefaultTime **1:00:00** (always set `-t`), MaxTime 7d, `PreemptMode=REQUEUE`.
   ~1 SU per Alpha GPU-hr (~$0.50); ~20k SU/project/yr; balance CLI **UNVERIFIED**
   (portal = ColdFront; ask support).
