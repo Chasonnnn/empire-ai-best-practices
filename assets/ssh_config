@@ -1,18 +1,14 @@
-# Empire AI Alpha — append to ~/.ssh/config, replace USER with your username.
-# ControlMaster: one interactive login (password + TOTP) leaves a master socket;
-# every later ssh/scp/rsync to this host rides it prompt-free for 48h (default —
-# ControlPersist is client-side; adjust to taste; ask the user their preference).
-# Real lifetime is bounded by network continuity: sleep or a network change
-# drops the TCP connection and kills the master early.
+# Merge into existing config; replace USER with the actual Empire username.
+# Historical Alpha password/MFA route; preserve newer approved host policy.
 Host empire alpha.empire-ai.org
   HostName alpha.empire-ai.org
   User USER
-  # The server has no pubkey auth; without this line an ssh-agent offering
-  # multiple keys burns MaxAuthTries -> "Too many authentication failures"
   PubkeyAuthentication no
   PreferredAuthentications keyboard-interactive,password
   ControlMaster auto
   ControlPath ~/.ssh/sockets/%r@%h-%p
+  # Idle persistence with no clients, not elapsed authentication lifetime.
+  # Server/network conditions can end the connection earlier.
   ControlPersist 48h
   ServerAliveInterval 60
   ServerAliveCountMax 5

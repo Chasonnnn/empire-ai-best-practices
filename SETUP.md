@@ -1,52 +1,13 @@
-# First-time setup (new Empire AI users)
+# Empire AI access
 
-Done when `ssh -O check empire` prints `Master running (pid=...)`. Until then, work
-through these steps in order.
+Request an account through the institution's current onboarding process. Use the official FIDO/support instructions for password and MFA enrollment; never route enrollment secrets through an agent transcript.
 
-## 1. Account & credentials
+Merge the matching host block from [assets/ssh_config](assets/ssh_config) into the existing SSH configuration without replacing unrelated hosts. Set the actual username and create a protected socket directory (`mkdir -p ~/.ssh/sockets && chmod 700 ~/.ssh/sockets`). Preserve working organization authentication settings rather than overriding them from historical observations.
 
-1. Request an account through your institution's Empire AI representative.
-2. Set your password at the FIDO portal `https://fido.empireai.edu`. Enrollment
-   uses an out-of-band PIN (delivered in person or by text — never email) plus a
-   confirmation mail from `FIDO@empireai.edu`.
-3. Your **first SSH login displays a QR code** — scan it with a TOTP authenticator
-   app (Duo / Google / Microsoft Authenticator; it acts as a 6-digit code
-   generator, not push approval).
+The template retains the previously used password/keyboard-interactive route and disables public-key attempts for this host. Verify current onboarding guidance if that route no longer works. A human performs interactive login in a real terminal with `ssh empire`; agents use the established connection.
 
-## 2. SSH configuration
+`ControlPersist 48h` means up to 48 hours of idle persistence with no client connections, not expiry 48 hours after login. Frequent clients can keep the connection active longer, and server policy, network failure, or sleep can end it earlier. A shorter idle setting is not a fixed reauthentication policy. Configuration edits affect a newly established master; do not kill a shared master to apply them without authorization.
 
-1. Copy [assets/ssh_config](assets/ssh_config) into `~/.ssh/config`, replacing
-   `USER` with your Empire AI username.
-2. Ask the user how long one login should stay valid (`ControlPersist`).
-   **Default: 48h.** It is client-side only (no server policy caps it); the real
-   bound is network continuity — sleep or a network change kills the socket
-   early regardless of the setting. Pick shorter if they prefer re-auth more
-   often on a shared machine.
-3. `mkdir -p ~/.ssh/sockets && chmod 700 ~/.ssh/sockets`
-4. The `PubkeyAuthentication no` line is load-bearing: the server has no pubkey
-   auth, and an ssh-agent offering several keys exhausts the server's auth
-   attempts before the password prompt appears (see TROUBLESHOOTING.md).
+Verify the existing connection with `ssh -O check empire`, then use `ssh -o BatchMode=yes empire ...` for automation. Follow authmux's transport check if configured for this context. If the connection is unavailable, stop that operation and use the approved human login handoff.
 
-## 3. First login — human, real terminal
-
-The login is interactive (password + TOTP) and agent shells have no TTY, so a
-**human** runs it in a real terminal window (for Claude Code users: a normal
-Terminal/iTerm window — the `!` prompt has no TTY either):
-
-```
-ssh empire
-```
-
-Password → 6-digit code → you're in. You may `exit` immediately; the
-ControlMaster socket persists 48h (or your configured window) and every
-subsequent agent command rides it.
-
-## 4. Verify
-
-- `ssh -O check empire` → `Master running (pid=...)`
-- `ssh empire 'sacctmgr -nP show assoc user=$USER format=Account'` → your
-  INSTITUTION value for SKILL.md §0.
-- **Optional** full validation — it spends SUs, so ask the user whether they
-  want to run it rather than running it automatically:
-  [assets/smoke_test.sh](assets/smoke_test.sh) (self-configuring BERT/SST-2
-  training job, ~10 GPU-min, ~$0.10 in SUs).
+During authorized scheduler setup, inspect the full account associations and current partitions/QoS. Record account, partition, and writable storage root independently; do not treat an association listing as proof of storage ownership. Explicitly resolve ambiguous projects before submission. SSH success establishes access only. Optional workload validation is described in [references/jobs.md](references/jobs.md).

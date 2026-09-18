@@ -1,169 +1,57 @@
 ---
 name: empire-ai-best-practices
-description: Use when working with the Empire AI cluster (alpha.empire-ai.org, Alpha/Grace/Beta) — running experiments, training, or batch inference there; submitting, monitoring, or debugging Slurm jobs; staging data or models; SSH/ControlMaster connection issues; or first-time account setup.
+description: Set up Empire AI access, stage environments and data, and submit, monitor, or debug its Slurm jobs on the Alpha and Beta clusters.
 ---
 
-# Empire AI Cluster Runbook
+# Empire AI
 
-New York State's academic AI cluster. Every fact below was validated by running it
-live on Alpha on 2026-07-17 unless marked **UNVERIFIED**. Two domains, easy to mix
-up: SSH host is `alpha.empire-ai.org` (hyphen); the FIDO credential portal,
-support, and Beta are `empireai.edu`.
+Use the requested institution, project, workload, and authorization. SSH uses `alpha.empire-ai.org`; credential/support services use the `empireai.edu` domain. Current account, partition, QoS, storage, and architecture settings are inputs, not interchangeable institution names.
 
-## 0. Personalize (edit when adopting this skill)
+## Two clusters
 
-```
-USER        = <your-empire-ai-username>   # on a configured machine: the User line of the "Host empire" block in ~/.ssh/config
-INSTITUTION = <your-institution>          # = your Slurm account AND GPU partition (cornell/columbia/nyu/rpi/suny/cuny/rochester/rit/mountsinai/scc)
-```
-On the cluster, derive it: `sacctmgr -nP show assoc user=$USER format=Account`.
-New user or unconfigured machine → follow [SETUP.md](SETUP.md) first.
-
-## 1. Connection protocol (the ONLY auth path that works for agents)
-
-Auth = password + TOTP code on **every new connection**; no SSH public keys; agent
-shells have no TTY. So:
-
-1. A **human** logs in once from a real terminal: `ssh empire` (config from
-   [assets/ssh_config](assets/ssh_config)). They may exit immediately — the
-   ControlMaster socket persists **48h** (default; `ControlPersist` in the config).
-2. Agent verifies `ssh -O check empire` → `Master running`, then runs everything
-   via `ssh empire '<cmd>'` / `scp` / `rsync -e ssh`, prompt-free.
-3. Use `-o BatchMode=yes` in scripts and pollers so a dead socket fails fast.
-4. Socket lapsed → ask the human for one fresh `ssh empire`; nothing else works.
-5. `ControlPersist` is **client-side only** — no server policy caps it, so longer
-   windows are fine. The real bound is network continuity: laptop sleep or a
-   network change drops the TCP connection and kills the master regardless of
-   the setting. Changing the value takes effect on the **next** fresh login, not
-   the currently running master.
-
-## 2. Cluster map (Alpha)
-
-| Partition | Nodes | Hardware | Validated result |
-|---|---|---|---|
-| `INSTITUTION` (e.g. `cornell`) | alphagpu01–24 (x86, 2 TB RAM, 8 GPU/node) | H100 80GB on gpu01–18, **H200 141GB on gpu19–24** | 2026-07-17: busy (~20 pending) yet a 1-GPU 5-min job ran in ~10 min. 2026-08-08 sustained load (~86 jobs/~51 pending): `--test-only` projected ~30h standard / ~15h priority for a 1-GPU multi-hour job — size wait expectations to current `squeue` depth, not the happy data point |
-| `coldfront_test` | alphagpu19–24 | H200-only side door, AllowAccounts=ALL, 6h cap | `--test-only` accepted with QOS `test` |
-| `grace` | betagg01–60 + alphagh01 | **ARM aarch64** Grace, CPU-only | **instant allocation**, mostly idle |
-| `cpu` | alphacpu01 | single x86 CPU node | was down — use `grace` |
-
-- **H200 access confirmed** (verified on a cornell account): `--gres=gpu:nvidia_h200:1`
-  or `--gres=gpu:1 --constraint=nvidia_h200`. Waits are occupancy, not permissions.
-  GRES names: `gpu:nvidia_h200`, `gpu:nvidia_h100_80gb_hbm3`.
-- **QOS ladder** (standard institution assoc): `cornell`-style default (prio 0, 7d,
-  ~30 jobs) · `standard` (500, 2d, ≤32 GPU) · `test` (800, 2h, ≤8 GPU — debug lane)
-  · `priority` (1000, 1d, ≤64 GPU, **2× SU**; cut a projected start 15→3 min).
-  **Your `-t` must be STRICTLY BELOW the chosen QOS's MaxWall** (both hit live
-  2026-08-09 on `priority`, cap 1-00:00:00): above the cap (`-t 36:00:00`) sbatch
-  hard-rejects with `QOSMaxWallDurationPerJobLimit` / "Job violates accounting/QOS
-  policy" — an error that never mentions walltime; at exactly the cap
-  (`-t 24:00:00`) the job is ACCEPTED but then pends forever with
-  `QOSMaxWallDurationPerJobLimit` as its squeue REASON. Fix pending jobs in place,
-  keeping queue position: `scontrol update JobId=<id> TimeLimit=12:00:00` —
-  the reason flips to `Priority` and a projected START_TIME appears within a
-  scheduler cycle. Check caps with `sacctmgr -nP show qos format=Name,MaxWall`.
-- Partition: DefaultTime **1:00:00** (always set `-t`), MaxTime 7d, `PreemptMode=REQUEUE`.
-  ~1 SU per Alpha GPU-hr (~$0.50); ~20k SU/project/yr; balance CLI **UNVERIFIED**
-  (portal = ColdFront; ask support).
-- **Beta** (GB200 NVL72): ARM + Enroot, early-adopter now; Alpha x86 images do
-  not port — ARM64 rebuild. Institution Beta access **UNVERIFIED**.
-
-## 3. Storage
-
-| Path | Role | Notes |
+| | Alpha | Beta |
 |---|---|---|
-| `/mnt/home/USER` | code, envs, sbatch, logs | ~100 GB cap (docs); NFS |
-| `/mnt/lustre/INSTITUTION/USER` | datasets, HF cache, checkpoints | pre-created; **NO backups** — replicate precious results off-cluster (Globus collection "Empire AI Alpha", or rsync over the socket) |
-| `/dev/shm`, `/tmp` | node-local scratch | shm counts against `--mem`; ~880 GB NVMe root on GPU nodes |
+| GPUs | H100 80 GB, H200 141 GB, RTX PRO 6000 Blackwell (x86); Grace nodes are ARM | GB200 NVL72, 4 per node, 189 GB (ARM aarch64) |
+| Partitions | institution partitions until the 2026-09-21 maintenance, then `alpha` and `grace`; `--account` required | `beta` only; `--account` required |
+| Software | project venvs on Lustre/home | NGC containers via Pyxis/Enroot only; no system Python |
+| Minimum job | site routing sends 1-GPU jobs to RTX; multi-GPU untyped requests exclude RTX | 4 GPUs; smaller jobs will be terminated |
+| Storage | `/mnt/lustre/<inst>/<user>` | `/projects/co/<account>`; home 100 GB quota |
+| Accounting | QoS with priority/standard tiers | SU tiers, charged from 2026-10-01 |
 
-In jobs: `export HF_HOME=/mnt/lustre/INSTITUTION/USER/hf`.
+Details: [references/beta.md](references/beta.md) for Beta; [references/cluster-context.md](references/cluster-context.md) for Alpha routing evidence; [references/notice_2026-09-18.md](references/notice_2026-09-18.md) for the announcement text and [references/beta_nvl72_job_submission_guide.pdf](references/beta_nvl72_job_submission_guide.pdf) for the site guide itself.
 
-## 4. Software & dependency policy: LATEST STABLE, own envs
+## Task routes
 
-- Modules are **bootstrap only** — they lag (`Python/3.10.15`, `CUDA/13.1`,
-  `apptainer/1.1.9`; flat Bright-style names, no conda module).
-- Build your own env with `uv` (install: `curl -LsSf https://astral.sh/uv/install.sh | sh`):
-  current Python + latest stable torch/transformers. Validated result: Python
-  3.13.12 + torch 2.13.0+cu130 built and ran first try. Check for updates at
-  project start rather than pinning to what the cluster ships.
-- **Internet works on login AND compute nodes** (verified from inside a GPU job) —
-  `pip install` / `hf download` work anywhere; still pre-stage multi-GB weights to
-  Lustre so queue time isn't spent downloading.
-- Compute-node system `python3` differs from the login node's — never rely on it.
-  `grace` nodes are aarch64 → ARM wheels only. Apptainer for containerized runs.
+- First access or SSH trouble: [SETUP.md](SETUP.md) and [assets/ssh_config](assets/ssh_config).
+- Environment, storage, and submission: [references/jobs.md](references/jobs.md).
+- Beta submission, QoS tiers, containers, checkpointing: [references/beta.md](references/beta.md) and [assets/beta_job_template.sbatch](assets/beta_job_template.sbatch).
+- Scheduler rewrites, held submission, and physical GPU verification: [references/placement.md](references/placement.md).
+- Monitoring: [assets/poll_jobs.sh](assets/poll_jobs.sh) and the completion section of [references/jobs.md](references/jobs.md); failed runs: [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
-## 5. Job patterns (validated)
+Resolve `SLURM_ACCOUNT`, `SLURM_PARTITION`, `SLURM_QOS`, and the storage root separately from approved project context and a current `sacctmgr show assoc` listing. Do not select the first association when multiple projects are possible. A failed lookup leaves configuration unresolved. After a site migration (partition rename, new cluster) re-run the association and partition checks before touching any tracked target config.
 
-- Batch: start from [assets/job_template.sbatch](assets/job_template.sbatch).
-  Check schedulability without queueing: `sbatch --test-only ...` prints projected start.
-- Bounded interactive probes — `timeout` on a pending srun revokes it cleanly:
-  `ssh empire 'timeout 100 srun -A INSTITUTION -p INSTITUTION --gres=gpu:1 -t 00:05:00 bash -c "hostname; nvidia-smi -L"'`
-- Monitor: `squeue -u $USER` · `sacct -j <id> -X -o State,Elapsed` · `scancel <id>`.
-  Agent-side: poll `sacct` over the socket every ≥60s and act on ALL terminal
-  states (COMPLETED/FAILED/CANCELLED/TIMEOUT/OUT_OF_MEMORY/NODE_FAIL/PREEMPTED).
-  **`sacct` history is short-horizon**: a scheduler reset (observed 2026-08-09 —
-  job ids restarted from ~996xxx down to ~86xx) wiped prior accounting records.
-  Record job ids + metadata off-cluster at submit time; never plan on querying
-  last month's jobs later.
-- **Validate at submit time, not just at job start.** On a busy cluster the
-  scarce resource is queue position: a job that pends for days and dies in
-  seconds in its own job-start preflight costs the entire wait (lived it:
-  a 3-day pend ended in a 2-second manifest-mismatch death). So mirror every
-  CPU-safe check the job runs at start — env locks, data files, model-snapshot
-  manifests, schema/config compatibility — as a login-node check at submission
-  time. Run the **same code path** (e.g. give the preflight script an
-  `--io-only` flag that exits before the first CUDA call), never a duplicate
-  reimplementation: two implementations drift, and that drift is exactly how
-  jobs die at start.
-- **Staged artifacts don't update themselves.** When you upgrade a validator,
-  manifest schema, or its writer, regenerate everything already staged on the
-  cluster in the same change — an artifact materialized under the old schema
-  fails the new checker days later. Stamp a `schema_version` in manifests.
-  Corollary while a job is still PENDING: its staged inputs are read at job
-  start, so you can fix them in place without losing queue position. Caveat:
-  that same mutability means several simultaneously PENDING sibling jobs can
-  start from drifted code/data bytes. For provenance-critical batches, stage
-  each submission into its own immutable snapshot (read-only, manifest of
-  content hashes verified again at job start) — you trade away in-place fixes
-  deliberately; a fix then means cancel + resubmit.
-- Fresh setup? The end-to-end smoke test is **optional and costs SUs** — offer it
-  and let the user decide, don't auto-run it: [assets/smoke_test.sh](assets/smoke_test.sh)
-  (self-configuring BERT/SST-2; expected `RESULT accuracy=0.92xx` — measured run:
-  0.9266, 27s train on 1× H100 at ~2,480 samples/s, well under 1 SU).
+## Connection discipline
 
-## 6. Workload sizing (LLM/encoder reference points)
+The site's sshd blocks the source IP after repeated authentication failures or connection churn; a block takes the whole workstation off the cluster for hours (observed 2026-09-17).
 
-- Encoder-scale (≤1B): 1× H100; seed sweeps as job arrays (~1 SU/hr each).
-- 12B–31B LoRA/QLoRA: 1× H200 (`--constraint=nvidia_h200`). Full fine-tune: one
-  node `-N 1 --gres=gpu:8`, FSDP/DeepSpeed over NDR InfiniBand. The
-  `gemma-trainer` skill's TRL/Unsloth recipes apply here (CUDA-only).
-- Batch inference ≤31B: 1× H200 bf16, or vLLM in Apptainer.
-- Stage weights from the login node:
-  `hf download <repo> --local-dir /mnt/lustre/INSTITUTION/USER/models/<name>`
+- Interactive login (password + Duo) needs a real TTY. The owner runs `ssh empire` in Terminal.app; an agent prompt runner produces `Too many authentication failures`. Never request passwords, tokens, or MFA codes in chat.
+- Automation uses the established ControlMaster socket with `BatchMode=yes`. Check with `ssh -O check empire` first. If the socket is dead or the login is denied, stop and hand off; never retry the same login.
+- One poller per workstation, one bounded `sacct` query per 30 minutes, exit on terminal state. Check `pgrep -fl poll_` before starting one. Wrap the query in `timeout`: a dead socket hangs rather than fails (observed 2026-09-18). No Monitor tool tailing over SSH.
+- Never start an interactive login attempt while a poller is running.
 
-## 7. When something breaks
+## Compute discipline
 
-[TROUBLESHOOTING.md](TROUBLESHOOTING.md) — a symptom→cause→fix table of every
-failure hit during validation. Check it before re-deriving.
+- GPU allocations are for GPU steps only. Manifest checks, hashing, packaging and scoring run on the login node, on the workstation, or on AWS. Large-model CPU scans can be SIGKILLed on the login node without a visible cgroup limit (exit -9, observed 2026-09-13); move those to a short bounded GPU packet.
+- Login nodes are for lightweight checks, staging, and edits. Validate input contracts before queueing with the same inexpensive preflight used at job start.
+- Keep the environment and every path a pending packet references unchanged. Do not sync the repository checkout on the cluster while a pending packet cites it (a resync between preflight and start failed a job on 2026-09-16). Use snapshots when provenance matters.
+- Request wall time strictly below the QoS MaxWall. Every tier kills at the limit; the training script must trap SIGTERM (`--signal=B:SIGTERM@900`), save a checkpoint and resume. `--requeue` is opt-in and creates a new billed run; provenance-sensitive runs keep `--no-requeue` and resume through a new versioned submission.
+- Preserve project runtime declarations and locks. New environments start from the approved baseline with explicit cluster compatibility exceptions (x86 Alpha venvs, aarch64 Beta containers). Do not upgrade tools or dependencies merely because a new task starts.
+- Home directories carry a 100 GB quota on Beta and are finite on Alpha. Venvs, HF caches, checkpoints and datasets live on project storage; set `HF_HOME` for staging commands and jobs alike.
 
-## 8. Official documentation
+## Approval and validation
 
-| Topic | Link |
-|---|---|
-| Support portal / tickets / wiki | https://empireai.freshdesk.com/support/home |
-| Getting started | https://empireai.freshdesk.com/support/solutions/articles/157000374441 |
-| CCR Buffalo Empire AI guide | https://docs.ccr.buffalo.edu/en/latest/howto/empireai/ |
-| Connecting to Alpha | https://empireai.freshdesk.com/support/solutions/articles/157000010767 |
-| Submitting jobs | https://empireai.freshdesk.com/support/solutions/articles/157000010768 |
-| Slurm partitions/queues | https://empireai.freshdesk.com/support/solutions/articles/157000168778 |
-| Alpha/Beta hardware | https://empireai.freshdesk.com/support/solutions/articles/157000363466 |
-| Service units & allocations | https://empireai.freshdesk.com/support/solutions/articles/157000363467 |
-| Alpha storage | https://empireai.freshdesk.com/support/solutions/articles/157000175046 |
-| Sharing data with other users | https://empireai.freshdesk.com/support/solutions/articles/157000010953 |
-| Citation guidelines (**cite Empire AI in every paper that used it**) | https://empireai.freshdesk.com/support/solutions/articles/157000359451 |
-| Reporting project highlights | https://empireai.freshdesk.com/support/solutions/articles/157000363495 |
+The optional smoke workload consumes allocation. Approval is bound to the hardware, duration, purpose and other limits it names, including GPU count, account, storage and permitted attempts. An unchanged approved request needs no repeated confirmation; changing any approved term requires a new owner go. A scheduler rewrite is not permission to substitute hardware, and another agent cannot supply owner approval.
 
-## 9. Etiquette
+Use the [placement gates](references/placement.md) before releasing a job and before starting its workload. `assets/smoke_test.sh` is a legacy one-GPU BERT/SST-2 submitter without these gates; site policy reroutes single-GPU jobs to RTX despite its partition argument. Finish validation by checking actual placement, scheduler outcome and workload results. A timeout, missing accounting, or successful submission is not a completed test.
 
-- Login nodes (alpha1/alpha2): probes, downloads, edits only — no heavy compute.
-- NVIDIA office hours: Thursdays 2–3pm ET (link in the login banner).
-- Sharing files: NFS home = NFSv4 ACLs by numeric UID (`nfs4_setfacl`); Lustre = POSIX ACLs.
+Do not repeat a submission, cancel jobs, modify pending inputs, or clean shared environments merely because a local command failed. Reconcile job IDs and actual state first and stay within the task's retry/cleanup authority. Report prepared, submitted, running, completed, workload-validated, and unresolved states distinctly.
