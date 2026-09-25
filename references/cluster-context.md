@@ -43,7 +43,7 @@ Announced changes, not yet observed on the scheduler; verify each before changin
 - Beta project users have access to both Beta and Alpha. SU accounting on Beta starts 2026-10-01.
 - Beta home directories: 100 GB quota enforced. Project storage `/projects/co/<project account>`, 8.333 SU per TB per month. Data not tied to an active Beta project should be offloaded.
 - NVL72 jobs need at least 4 GPUs; automated termination of smaller jobs is planned. Single-GPU workloads move to the Alpha RTX 6000 Pro nodes. Four NVL72 trays for short single-GPU and interactive jobs are under consideration only.
-- Alpha maintenance 2026-09-21: institution partitions (`cornell`, `nyu`, ...) are replaced by hardware-tier partitions `alpha` and `grace`, and every submission needs an explicit `--account`. Any tracked target that says `partition: cornell` breaks at that point; the QoS lane (`priority`, `standard`) is attached to the account, so re-list `sacctmgr show assoc` after the maintenance and re-verify `AllowAccounts`/`AllowQos` on `alpha` before editing.
+- Alpha maintenance 2026-09-21: institution partitions (`cornell`, `nyu`, ...) are replaced by hardware-tier partitions `alpha` and `grace`, and every submission needs an explicit `--account`. Any tracked target that says `partition: cornell` breaks at that point; the notice implied the QoS lane stays on the current account. Superseded: the QoS tiers moved to the project account ([observed 2026-09-21](#alpha-migration-observed-2026-09-21)).
 - A Rootly status dashboard publishes incidents; an SU balance dashboard is planned, and PIs see usage on ColdFront.
 - NVIDIA office hours Thursdays 14:00 to 15:00 ET (Teams link and survey in the notice).
 

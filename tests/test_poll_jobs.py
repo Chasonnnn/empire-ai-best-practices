@@ -21,7 +21,7 @@ class PollJobs(unittest.TestCase):
             **os.environ,
             "PATH": str(binary) + os.pathsep + os.environ["PATH"],
             "POLL_HOST": "empire", "POLL_JOBS": "1,2", "POLL_LOG": str(self.root / "log"),
-            "POLL_INTERVAL": "600", "POLL_ALLOW_MULTIPLE": "1", "SSH_CALLS": str(self.root / "calls"),
+            "POLL_INTERVAL": "3600", "POLL_ALLOW_MULTIPLE": "1", "SSH_CALLS": str(self.root / "calls"),
         }
 
     def tearDown(self):
@@ -43,21 +43,37 @@ class PollJobs(unittest.TestCase):
         self.assertIn("all terminal", log)
 
     def test_rejects_short_interval_and_bad_job_ids_before_any_query(self):
-        self.env["POLL_INTERVAL"] = "60"
-        self.assertNotEqual(self.run_poll().returncode, 0)
         self.env["POLL_INTERVAL"] = "600"
+        self.assertNotEqual(self.run_poll().returncode, 0)
+        self.env["POLL_INTERVAL"] = "3600"
         self.env["POLL_JOBS"] = "1;rm"
         self.assertNotEqual(self.run_poll().returncode, 0)
         self.assertFalse((self.root / "calls").exists())
 
     def test_failed_query_is_logged_not_retried(self):
         self.env["SSH_EXIT"] = "255"
-        self.env["POLL_INTERVAL"] = "600"
         with self.assertRaises(subprocess.TimeoutExpired):
             self.run_poll(timeout=3)
         calls = (self.root / "calls").read_text().splitlines()
         self.assertEqual(len(calls), 1)
         self.assertIn("query failed rc=255", (self.root / "log").read_text())
+
+    def assert_keeps_polling(self, out):
+        self.env["SSH_OUT"] = out
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_poll(timeout=3)
+        self.assertNotIn("all terminal", (self.root / "log").read_text())
+
+    def test_missing_job_row_is_not_terminal(self):
+        self.assert_keeps_polling("1|COMPLETED|01:00:00|0:0\n")
+
+    def test_preempted_is_not_terminal(self):
+        self.assert_keeps_polling("1|COMPLETED|01:00:00|0:0\n2|PREEMPTED|00:10:00|0:0\n")
+
+    def test_cancelled_by_annotation_is_terminal(self):
+        self.env["SSH_OUT"] = "1|CANCELLED by 123|00:01:00|0:0\n2|TIMEOUT|12:00:04|0:0\n"
+        self.assertEqual(self.run_poll().returncode, 0)
+        self.assertIn("all terminal", (self.root / "log").read_text())
 
 
 if __name__ == "__main__":

@@ -10,7 +10,8 @@ set -u
 POLL_INTERVAL="${POLL_INTERVAL:-3600}"
 POLL_TIMEOUT="${POLL_TIMEOUT:-60}"
 [[ "$POLL_JOBS" =~ ^[0-9]+(,[0-9]+)*$ ]] || { echo "POLL_JOBS must be numeric job IDs" >&2; exit 2; }
-[[ "$POLL_INTERVAL" =~ ^[0-9]+$ && "$POLL_INTERVAL" -ge 600 ]] || { echo "POLL_INTERVAL must be >= 600 seconds" >&2; exit 2; }
+# Owner rule 2026-09-20: at most one Empire contact per hour while jobs run.
+[[ "$POLL_INTERVAL" =~ ^[0-9]+$ && "$POLL_INTERVAL" -ge 3600 ]] || { echo "POLL_INTERVAL must be >= 3600 seconds" >&2; exit 2; }
 if [[ -z "${POLL_ALLOW_MULTIPLE:-}" ]]; then
   # Exclude this process, its parent, and its children: `caffeinate -s script` execs the
   # script and spawns a helper child whose cmdline still names the script (macOS, 2026-09-18).
@@ -28,6 +29,18 @@ if [[ -z "${POLL_ALLOW_MULTIPLE:-}" ]]; then
   [[ -z "${others// /}" ]] || { echo "another poller is running:$others" >&2; exit 3; }
 fi
 stamp() { date -u +%FT%TZ; }
+# Final only when every requested job has a row in a terminal state. A missing row is unresolved;
+# PREEMPTED can requeue, so it keeps the poller running.
+all_terminal() {
+  local id state
+  for id in ${POLL_JOBS//,/ }; do
+    state=$(awk -F'|' -v j="$id" '$1==j {split($2, s, " "); sub(/\+$/, "", s[1]); print s[1]; exit}' <<< "$1")
+    case "$state" in
+      COMPLETED|FAILED|CANCELLED|TIMEOUT|OUT_OF_MEMORY|NODE_FAIL|BOOT_FAIL|DEADLINE) ;;
+      *) return 1 ;;
+    esac
+  done
+}
 while true; do
   # The master socket can hang without closing; bound the whole query, not only connect.
   out=$(timeout "$POLL_TIMEOUT" ssh -o BatchMode=yes -o ConnectTimeout=20 "$POLL_HOST" \
@@ -37,7 +50,7 @@ while true; do
     echo "$(stamp) query failed rc=$rc (no retry inside the interval)" >> "$POLL_LOG"
   else
     echo "$(stamp) ${out//$'\n'/ | }" >> "$POLL_LOG"
-    if ! grep -qE "RUNNING|PENDING|REQUEUED|COMPLETING|SUSPENDED|CONFIGURING" <<< "$out"; then
+    if all_terminal "$out"; then
       echo "$(stamp) all terminal" >> "$POLL_LOG"
       exit 0
     fi

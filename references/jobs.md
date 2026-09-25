@@ -20,7 +20,7 @@ Always specify walltime, strictly below the QoS MaxWall. Query current account/p
 
 ### Wall time and legs
 
-Advertised MaxWall and the enforced cap can differ; check the limits of jobs that are actually running under the same QoS. For runs longer than the cap, split into legs below the cap that resume from the newest checkpoint with byte-identical task arguments, or use a QoS with a longer limit. Measure throughput on the first leg: two arms on the same recipe and hardware, differing only in prompt, ran at 8.49 and 28.95 s/it (2026-09-23), so an estimate from an earlier run can miss by 3x.
+Advertised MaxWall and the enforced cap can differ ([observed caps](cluster-context.md#alpha-migration-observed-2026-09-21)); check the limits of jobs that are actually running under the same QoS. For runs longer than the cap, split into legs below the cap that resume from the newest checkpoint with byte-identical task arguments, or use a QoS with a longer limit. Measure throughput on the first leg: two arms on the same recipe and hardware, differing only in prompt, ran at 8.49 and 28.95 s/it (2026-09-23), so an estimate from an earlier run can miss by 3x.
 
 Every tier kills at the wall limit. Add `--signal=B:SIGTERM@900` and have the training script save a checkpoint on SIGTERM and resume from the newest one. `--requeue` is opt-in: it restarts the job as a new billed allocation on the same job ID without a new packet, so provenance-sensitive executors keep `--no-requeue` and resume through a new versioned submission that cites the checkpoint. A requeued job re-enters PENDING and competes on fairshare.
 
@@ -47,9 +47,9 @@ Do not update the referenced environment while the job is pending/running. The w
 
 The Alpha login node reaches S3 over HTTPS with `curl` and has no cloud CLI or credentials. To move checkpoints:
 
-1. On the workstation, generate `put_object` presigned URLs under the approved cloud identity, with ContentLength pinned per file.
+1. On the workstation, generate `put_object` presigned URLs under the approved cloud identity, with ContentLength pinned per file, just before the transfer starts. URLs signed with temporary (SSO) credentials stop working when that session expires, whatever expiry the URL requests.
 2. Copy the URL list to the login node with mode 600 and run a `nohup` curl loop that logs size and MD5 per file.
-3. Verify every key with `head-object` (ContentLength, and ETag equal to MD5 for single-part uploads), then delete the URL list.
+3. Verify every key with `head-object` (ContentLength, and ETag equal to MD5 for single-part uploads to a bucket without SSE-KMS; under SSE-KMS the ETag is not the MD5, so compare a checksum header instead), then delete the URL list.
 
 A single PUT handles up to 5 GB. Transfer weights, config and tokenizer files only; 12.4 GB took 4.5 minutes (2026-09-19).
 
@@ -61,7 +61,7 @@ Build the delete list from what runs and ledgers still cite, then dry-run it wit
 
 Use the recorded job ID. Check live state with squeue and allocation records with `sacct -j JOBID -X --format=JobIDRaw,State,ExitCode,Elapsed -P`. Record query errors and accounting delay separately from job outcomes.
 
-Polling rules (owner, 2026-09-17; hourly from 2026-09-20): one poller per workstation, one `sacct` query per hour once jobs run, over the owner's existing ControlMaster socket, exit when every job is terminal. `assets/poll_jobs.sh` implements this: it refuses to start beside another poller, rejects intervals under 10 minutes, wraps each query in `timeout` so a dead socket cannot hang the tick, and logs a failed query without retrying inside the interval. Never poll with a second SSH loop, a Monitor tool tail, or `squeue` in a tight loop; connection churn from one IP led to a multi-hour sshd block. If the socket dies, the poller logs failures until the owner re-logs in; do not attempt the login from automation.
+Polling rules (owner, 2026-09-17; hourly from 2026-09-20): one poller per workstation, one `sacct` query per hour once jobs run, over the owner's existing ControlMaster socket, exit when every job is terminal. `assets/poll_jobs.sh` implements this: it refuses to start beside another poller, rejects intervals under one hour, reports all terminal only when every requested job has a terminal row (a missing row or PREEMPTED keeps it polling), wraps each query in `timeout` so a dead socket cannot hang the tick, and logs a failed query without retrying inside the interval. Never poll with a second SSH loop, a Monitor tool tail, or `squeue` in a tight loop; connection churn from one IP led to a multi-hour sshd block. If the socket dies, the poller logs failures until the owner re-logs in; do not attempt the login from automation.
 
 COMPLETED plus ExitCode 0:0 is scheduler success. FAILED, CANCELLED, TIMEOUT, OUT_OF_MEMORY, NODE_FAIL, BOOT_FAIL, and DEADLINE are failure outcomes. Normalize state annotations such as a trailing `+` or cancellation details. PREEMPTED can transition to requeue; inspect the active job and newest allocation state before treating it as final. REQUEUED, pending, and running states are not final. Unknown states or missing records are unresolved, not success; consult the installed scheduler's current state definitions.
 
