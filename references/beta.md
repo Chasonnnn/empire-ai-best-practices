@@ -32,6 +32,8 @@ short single-GPU and interactive jobs; treat that as unavailable until the site 
 | long | 200 | 7 d | 36 | 0.5x | NoReserve: fills idle gaps only |
 | burst | 0 | 7 d | 36 | free | system-assigned when the project budget is exhausted; preemptable |
 
+Plan Beta priority jobs against the listed 24 h. The 12 h cap observed on Alpha priority is not assumed on Beta (owner ruling 2026-09-25); a `QOSMaxWallDurationPerJobLimit` pending reason below 24 h would overturn this.
+
 SU = GPUs x hours x rate. Three limit layers reject a job at submission: QoS per user, project
 budget (`GrpTRESMins`), institution cap. DenyOnLimit rejects instead of queueing. Running jobs
 finish when the budget runs out; only new submissions move to burst.
