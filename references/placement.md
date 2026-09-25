@@ -40,6 +40,11 @@ submission. Neither measure overrides a server-side plugin. See
 [sbatch](https://slurm.schedmd.com/sbatch.html) and
 [scontrol](https://slurm.schedmd.com/scontrol.html).
 
+Do not repair a submitted job with `scontrol update` (account, QoS, partition, GPU type,
+time). The live job then differs from the packet's approved request and the execution gate
+fails closed at start; on 2026-09-21 seven repaired jobs failed within 10 s and lost their
+queue position. Cancel, update the target, prepare a fresh packet, and resubmit.
+
 ## Execution gate and provenance
 
 Before the workload starts, check the packet and environment again on the allocated

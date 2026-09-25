@@ -49,6 +49,15 @@ Announced changes, not yet observed on the scheduler; verify each before changin
 
 Full text: [notice_2026-09-18.md](notice_2026-09-18.md). The attached guide is stored as [beta_nvl72_job_submission_guide.pdf](beta_nvl72_job_submission_guide.pdf) and distilled in [beta.md](beta.md).
 
+## Alpha migration observed 2026-09-21
+
+- Every queued and running job ended `NODE_FAIL` at the maintenance. Checkpoints on Lustre survived; jobs resume from them through new submissions.
+- Partition `cornell` is gone. H200 nodes `alphagpu19-24` are on `alpha` (gres `nvidia_h200`, feature `h200`); `alpha` showed `AllowAccounts=ALL` and `AllowQos=ALL`.
+- The migration moved the `priority`, `standard`, `long` and `test` QoS from the institution account to the project account (default QoS `standard`). The institution account kept only `burst`. Jobs resubmitted under the institution account pended with `InvalidQOS`.
+- Priority QoS showed `MaxWall=1-00:00:00` in `sacctmgr`, but jobs requesting 21 to 24 h pended with `QOSMaxWallDurationPerJobLimit`; every running priority job was at most 12 h (observed 2026-09-20). QoS `standard` allowed 2 days at half the priority; `long` allowed 7 days.
+
+After any site change, list `sacctmgr show assoc user=$USER` and confirm which account carries each QoS on the target partition before editing targets or resubmitting.
+
 ## Primary sources
 
 - [Empire support/onboarding](https://empireai.freshdesk.com/support/home)

@@ -1,13 +1,13 @@
 #!/bin/bash
-# Single Empire poller. One bounded sacct query per interval over the owner's existing
+# Single Empire poller. One bounded sacct query per interval (default hourly) over the owner's existing
 # ControlMaster socket; exits when every listed job is terminal. Never opens a second
 # connection loop and never retries a denied login.
-#   POLL_HOST=empire POLL_JOBS=89298,89325 POLL_LOG=path POLL_INTERVAL=1800 assets/poll_jobs.sh
+#   POLL_HOST=empire POLL_JOBS=89298,89325 POLL_LOG=path POLL_INTERVAL=3600 assets/poll_jobs.sh
 set -u
 : "${POLL_HOST:?SSH host alias with an established master connection}"
 : "${POLL_JOBS:?comma-separated Slurm job IDs}"
 : "${POLL_LOG:?append-only log path}"
-POLL_INTERVAL="${POLL_INTERVAL:-1800}"
+POLL_INTERVAL="${POLL_INTERVAL:-3600}"
 POLL_TIMEOUT="${POLL_TIMEOUT:-60}"
 [[ "$POLL_JOBS" =~ ^[0-9]+(,[0-9]+)*$ ]] || { echo "POLL_JOBS must be numeric job IDs" >&2; exit 2; }
 [[ "$POLL_INTERVAL" =~ ^[0-9]+$ && "$POLL_INTERVAL" -ge 600 ]] || { echo "POLL_INTERVAL must be >= 600 seconds" >&2; exit 2; }
