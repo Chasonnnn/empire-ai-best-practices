@@ -12,8 +12,20 @@ POLL_TIMEOUT="${POLL_TIMEOUT:-60}"
 [[ "$POLL_JOBS" =~ ^[0-9]+(,[0-9]+)*$ ]] || { echo "POLL_JOBS must be numeric job IDs" >&2; exit 2; }
 [[ "$POLL_INTERVAL" =~ ^[0-9]+$ && "$POLL_INTERVAL" -ge 600 ]] || { echo "POLL_INTERVAL must be >= 600 seconds" >&2; exit 2; }
 if [[ -z "${POLL_ALLOW_MULTIPLE:-}" ]]; then
-  others=$(pgrep -f "poll_jobs.sh" | grep -v "^$$\$" | grep -v "^$PPID\$" || true)
-  [[ -z "$others" ]] || { echo "another poller is running: $others" >&2; exit 3; }
+  # Exclude this process, its parent, and its children: `caffeinate -s script` execs the
+  # script and spawns a helper child whose cmdline still names the script (macOS, 2026-09-18).
+  # No command substitution: a $( ) subshell would carry this script's own cmdline.
+  scratch="${TMPDIR:-/tmp}/poll_jobs.$$.pids"
+  pgrep -f "poll_jobs.sh" > "$scratch" 2>/dev/null || true
+  pgrep -P "$$" > "$scratch.kids" 2>/dev/null || true
+  others=""
+  while read -r pid; do
+    [[ "$pid" == "$$" || "$pid" == "$PPID" ]] && continue
+    grep -qx "$pid" "$scratch.kids" && continue
+    others="$others $pid"
+  done < "$scratch"
+  rm -f "$scratch" "$scratch.kids"
+  [[ -z "${others// /}" ]] || { echo "another poller is running:$others" >&2; exit 3; }
 fi
 stamp() { date -u +%FT%TZ; }
 while true; do
