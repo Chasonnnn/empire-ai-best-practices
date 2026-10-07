@@ -5,6 +5,7 @@ Historical observations below are starting hypotheses. Confirm current account, 
 | Symptom | Check | Bounded correction |
 |---|---|---|
 | Too many authentication failures | Current host auth policy and offered keys; whether the login ran without a TTY | Use the approved host-specific configuration; the owner logs in from Terminal.app, not an agent prompt runner (2026-09-17) |
+| Agent `rsync`/`scp`/`ssh` prints `Permission denied, please try again` then `Too many authentication failures`; next tick gets `Connection refused` | Whether the socket was gone (`ssh -O check empire`) and the command used the `empire` alias without BatchMode | The dead socket made `ControlMaster auto` open a fresh login; the no-TTY password attempts triggered the IP block (2026-10-07). Stop every SSH caller, including the poller, and wait out the block; then the owner makes one login from Terminal.app. Use `empire-batch` for all automation ([assets/ssh_config](assets/ssh_config)) |
 | Password/MFA prompt in automation | Master transport and BatchMode | Stop that operation; establish the approved interactive session |
 | SSH master unavailable | Socket check and network/server state | Reconnect when authorized; ControlPersist is idle time, not a guarantee |
 | Port 22 connection refused or timed out for hours | Recent auth failures and poller churn from this IP; other networks reach the host | Source-IP block (2026-09-17). Stop every SSH loop, do not retry, wait or use another network; run one poller afterwards |

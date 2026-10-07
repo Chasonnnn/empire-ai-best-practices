@@ -2,7 +2,7 @@
 # Single Empire poller. One bounded sacct query per interval (default hourly) over the owner's existing
 # ControlMaster socket; exits when every listed job is terminal. Never opens a second
 # connection loop and never retries a denied login.
-#   POLL_HOST=empire POLL_JOBS=89298,89325 POLL_LOG=path POLL_INTERVAL=3600 assets/poll_jobs.sh
+#   POLL_HOST=empire-batch POLL_JOBS=89298,89325 POLL_LOG=path POLL_INTERVAL=3600 assets/poll_jobs.sh
 set -u
 : "${POLL_HOST:?SSH host alias with an established master connection}"
 : "${POLL_JOBS:?comma-separated Slurm job IDs}"

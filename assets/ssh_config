@@ -12,3 +12,15 @@ Host empire alpha.empire-ai.org
   ControlPersist 48h
   ServerAliveInterval 60
   ServerAliveCountMax 5
+
+# Automation alias (2026-10-07). Rides the same master socket as `empire`; never opens a connection itself.
+# ProxyCommand runs only when no master socket answers, and /usr/bin/false makes that attempt fail at once,
+# so a dead socket cannot fall through to password attempts that get the source IP blocked.
+# Agents use `ssh empire-batch ...`, `rsync ... empire-batch:path`, `scp ... empire-batch:path`.
+Host empire-batch
+  HostName alpha.empire-ai.org
+  User USER
+  ControlPath ~/.ssh/sockets/%r@%h-%p
+  ControlMaster no
+  BatchMode yes
+  ProxyCommand /usr/bin/false
